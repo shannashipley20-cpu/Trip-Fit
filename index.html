@@ -1,0 +1,110 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<meta name="theme-color" content="#7c5cff">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="default">
+<meta name="apple-mobile-web-app-title" content="20-Day Tracker">
+<link rel="manifest" href="manifest.json">
+<title>20-Day Theoretical Tracker</title>
+<style>
+:root{--accent:#7c5cff;--accentbg:#eeeaff;--text:#20252b;--muted:#68717b;--border:#dddde3;--card:#fff;--warn:#fff4e0}
+*{box-sizing:border-box}body{margin:0;background:#f7f7fa;color:var(--text);font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+main{max-width:720px;margin:auto;padding:18px 14px 36px}
+.card{background:var(--card);border:1px solid var(--border);border-radius:18px;padding:18px;margin-bottom:12px}
+h1{font-size:23px;margin:0 0 3px}h2{font-size:16px;margin:0 0 12px}.muted{color:var(--muted);font-size:13px}
+.stats{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:15px}.stat{padding:13px;border-radius:14px;background:#f0edff}.num{font-size:24px;font-weight:800}
+.grid{display:grid;grid-template-columns:1fr 1fr;gap:12px}label{display:block;font-size:12px;font-weight:700;color:var(--muted);margin-bottom:6px}
+input{width:100%;border:1px solid var(--border);border-radius:10px;padding:12px;font-size:16px;background:#fff}
+button{border:0;border-radius:10px;padding:12px 15px;min-height:44px;background:var(--accent);color:#fff;font-weight:700}button.secondary{background:var(--accentbg);color:var(--text)}
+.actions{display:flex;gap:10px;flex-wrap:wrap;margin-top:14px}.bar{height:12px;background:#e9e9ec;border-radius:99px;overflow:hidden}.fill{height:100%;background:var(--accent);width:0%;transition:width .2s}
+.scroll{overflow:auto;max-height:380px}table{width:100%;border-collapse:collapse;font-size:13px}th,td{text-align:left;padding:9px 6px;border-bottom:1px solid var(--border);white-space:nowrap}
+.warn{background:var(--warn)}@media(max-width:520px){.stats{grid-template-columns:1fr 1fr}.stats .stat:last-child{grid-column:1/-1}.grid{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+<main id="app">
+<section class="card">
+  <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start">
+    <div><h1>20-Day Theoretical Tracker</h1><div class="muted">Sep 21 → Oct 11, 2026</div></div>
+    <button id="reset" class="secondary" type="button">Reset</button>
+  </div>
+  <div class="stats">
+    <div class="stat"><div class="muted">Starting weight</div><div class="num">229 lb</div></div>
+    <div class="stat"><div class="muted">Days remaining</div><div class="num" id="days">20</div></div>
+    <div class="stat"><div class="muted">Projected Oct 11</div><div class="num" id="projection">217.4 lb</div></div>
+  </div>
+</section>
+
+<section class="card">
+<h2>Today's entry</h2>
+<div class="grid">
+<div><label for="date">Date</label><input id="date" type="date" value="2026-09-21"></div>
+<div><label for="weight">Weight (lb)</label><input id="weight" type="number" min="0" max="600" step="0.1" placeholder="229"></div>
+<div><label for="steps">Steps</label><input id="steps" type="number" min="0" max="100000" step="100" placeholder="10000"></div>
+<div><label for="cal">Calories eaten</label><input id="cal" type="number" min="0" max="10000" step="50" placeholder="1200"></div>
+</div>
+<div class="actions"><button id="save" type="button">Save today's entry</button><button id="plan" class="secondary" type="button">Show theoretical plan</button></div>
+<div id="msg" class="muted" style="margin-top:10px" aria-live="polite"></div>
+</section>
+
+<section class="card">
+<h2>Progress toward October 11</h2>
+<div class="muted" id="progressText">Theoretical scale change: −11.6 lb</div>
+<div class="bar" style="margin-top:10px"><div id="bar" class="fill"></div></div>
+<div class="muted" style="margin-top:8px">Projection is a mathematical estimate, not a prediction of actual fat loss or scale weight.</div>
+</section>
+
+<section class="card">
+<h2>Log</h2>
+<div class="scroll"><table><thead><tr><th>Date</th><th>Day</th><th>Plan</th><th>Weight</th><th>Steps</th><th>Calories</th></tr></thead><tbody id="rows"></tbody></table></div>
+</section>
+
+<section class="card warn">
+<h2>Safety note</h2>
+<div class="muted">The alternating zero-calorie/1,200-calorie schedule is an extremely restrictive intake pattern and shouldn't be undertaken without medical supervision. This tracker does not determine whether fasting is safe for an individual. Stop and seek medical advice for concerning symptoms such as fainting, confusion, severe weakness, chest pain, or persistent vomiting.</div>
+</section>
+</main>
+<script>
+(()=> {
+const start="2026-09-21", end="2026-10-11", startWeight=229, theoreticalEnd=217.4;
+let entries=JSON.parse(localStorage.getItem("wt_entries")||"[]");
+const $=id=>document.getElementById(id);
+function utc(s){let [y,m,d]=s.split("-").map(Number);return Date.UTC(y,m-1,d)}
+function diff(a,b){return Math.round((utc(b)-utc(a))/86400000)}
+function planFor(date){let d=diff(start,date);return d%3===2?"1,200-calorie day":"fasting day"}
+function theoreticalWeight(date){let d=Math.max(0,Math.min(20,diff(start,date)));return startWeight-(11.6*d/20)}
+function render(){
+ let date=$("date").value||start, remaining=Math.max(0,20-diff(start,date));
+ $("days").textContent=remaining;$("projection").textContent=theoreticalWeight(date).toFixed(1)+" lb";
+ let logged=entries.length?entries[entries.length-1].weight:startWeight;
+ let pct=Math.max(0,Math.min(100,(startWeight-logged)/(startWeight-theoreticalEnd)*100));
+ $("bar").style.width=pct+"%";
+ $("progressText").textContent="Theoretical scale change: −11.6 lb • Current logged change: "+(startWeight-logged>=0?"−":"＋")+Math.abs(startWeight-logged).toFixed(1)+" lb";
+ let rows=$("rows");rows.innerHTML="";
+ for(let d=0;d<=20;d++){
+  let dt=new Date(utc(start)+d*86400000),s=dt.toISOString().slice(0,10),e=entries.find(x=>x.date===s);
+  let tr=document.createElement("tr");
+  [s,d===0?"Start":"Day "+d,planFor(s),e?e.weight+" lb":"—",e?e.steps.toLocaleString():"—",e?e.calories.toLocaleString():"—"].forEach(v=>{let td=document.createElement("td");td.textContent=v;tr.appendChild(td)});
+  rows.appendChild(tr);
+ }
+}
+$("date").addEventListener("change",render);
+$("save").addEventListener("click",()=>{
+ let date=$("date").value,w=Number($("weight").value),steps=Number($("steps").value),cal=Number($("cal").value);
+ if(!date||date<start||date>end){$("msg").textContent="Choose a date between Sep 21 and Oct 11.";return}
+ if(!Number.isFinite(w)||w<=0||!Number.isFinite(steps)||steps<0||!Number.isFinite(cal)||cal<0){$("msg").textContent="Enter valid weight, steps, and calorie values.";return}
+ let item={date,weight:w,steps,calories:cal},i=entries.findIndex(x=>x.date===date);
+ if(i>=0)entries[i]=item;else entries.push(item);entries.sort((a,b)=>a.date.localeCompare(b.date));
+ localStorage.setItem("wt_entries",JSON.stringify(entries));$("msg").textContent="Entry saved for "+date+".";render();
+});
+$("plan").addEventListener("click",()=>{let d=$("date").value||start;$("msg").textContent=d+" is a "+planFor(d)+". The theoretical model uses a 3-day repeating pattern starting with a fasting day."});
+$("reset").addEventListener("click",()=>{if(confirm("Clear all saved entries?")){entries=[];localStorage.removeItem("wt_entries");$("weight").value="";$("steps").value="";$("cal").value="";$("date").value=start;$("msg").textContent="Tracker reset.";render()}});
+if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
+render();
+})();
+</script>
+</body>
+</html>
