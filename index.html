@@ -58,6 +58,16 @@ button{border:0;border-radius:10px;padding:12px 15px;min-height:44px;background:
 </section>
 
 <section class="card">
+<h2>Extend Goal</h2>
+<div class="muted">Choose a later end date to continue the tracker. Your existing entries are preserved.</div>
+<div class="actions" style="margin-top:12px">
+  <div style="flex:1;min-width:220px"><label for="newEnd">New end date</label><input id="newEnd" type="date" min="2026-10-12"></div>
+  <button id="extend" type="button">Extend goal</button>
+</div>
+<div id="extendMsg" class="muted" style="margin-top:10px" aria-live="polite"></div>
+</section>
+
+<section class="card">
 <h2>Log</h2>
 <div class="scroll"><table><thead><tr><th>Date</th><th>Day</th><th>Plan</th><th>Weight</th><th>Steps</th><th>Calories</th></tr></thead><tbody id="rows"></tbody></table></div>
 </section>
@@ -69,41 +79,85 @@ button{border:0;border-radius:10px;padding:12px 15px;min-height:44px;background:
 </main>
 <script>
 (()=> {
-const start="2026-09-21", end="2026-10-11", startWeight=229, theoreticalEnd=217.4;
+const start="2026-09-21", originalEnd="2026-10-11", startWeight=229, theoreticalEnd=217.4;
 let entries=JSON.parse(localStorage.getItem("wt_entries")||"[]");
 const $=id=>document.getElementById(id);
+function getEnd(){return localStorage.getItem("wt_goal_end")||originalEnd}
+function setEnd(v){localStorage.setItem("wt_goal_end",v)}
 function utc(s){let [y,m,d]=s.split("-").map(Number);return Date.UTC(y,m-1,d)}
 function diff(a,b){return Math.round((utc(b)-utc(a))/86400000)}
 function planFor(date){let d=diff(start,date);return d%3===2?"1,200-calorie day":"fasting day"}
-function theoreticalWeight(date){
-  const s=getGoalSettings();
-  const total=Math.max(1,daysBetween(START_DATE,s.goalDate));
-  const elapsed=Math.max(0,daysBetween(START_DATE,date));
-  const p=Math.max(0,Math.min(1,elapsed/total));
-  return START_WEIGHT+(s.target-START_WEIGHT)*p;
-}
+function fmtDate(s){return new Date(s+"T12:00:00").toLocaleDateString(undefined,{month:"short",day:"numeric",year:"numeric"})}
+
 $("date").addEventListener("change",render);
+
 $("save").addEventListener("click",()=>{
  let date=$("date").value,w=Number($("weight").value),steps=Number($("steps").value),cal=Number($("cal").value);
- if(!date||date<start||date>end){$("msg").textContent="Choose a date between Sep 21 and Oct 11.";return}
- if(!Number.isFinite(w)||w<=0||!Number.isFinite(steps)||steps<0||!Number.isFinite(cal)||cal<0){$("msg").textContent="Enter valid weight, steps, and calorie values.";return}
+ let end=getEnd();
+ if(!date||date<start||date>end){
+   $("msg").textContent="Choose a date between "+fmtDate(start)+" and "+fmtDate(end)+".";
+   return;
+ }
+ if(!Number.isFinite(w)||w<=0||!Number.isFinite(steps)||steps<0||!Number.isFinite(cal)||cal<0){
+   $("msg").textContent="Enter valid weight, steps, and calorie values.";
+   return;
+ }
  let item={date,weight:w,steps,calories:cal},i=entries.findIndex(x=>x.date===date);
- if(i>=0)entries[i]=item;else entries.push(item);entries.sort((a,b)=>a.date.localeCompare(b.date));
- localStorage.setItem("wt_entries",JSON.stringify(entries));$("msg").textContent="Entry saved for "+date+".";render();
+ if(i>=0)entries[i]=item;else entries.push(item);
+ entries.sort((a,b)=>a.date.localeCompare(b.date));
+ localStorage.setItem("wt_entries",JSON.stringify(entries));
+ $("msg").textContent="Entry saved for "+date+".";
+ render();
 });
-$("plan").addEventListener("click",()=>{let d=$("date").value||start;$("msg").textContent=d+" is a "+planFor(d)+". The theoretical model uses a 3-day repeating pattern starting with a fasting day."});
-$("reset").addEventListener("click",()=>{if(confirm("Clear all saved entries?")){entries=[];localStorage.removeItem("wt_entries");$("weight").value="";$("steps").value="";$("cal").value="";$("date").value=start;$("msg").textContent="Tracker reset.";render()}});
+
+$("plan").addEventListener("click",()=>{
+ let d=$("date").value||start;
+ $("msg").textContent=d+" is a "+planFor(d)+". The theoretical model uses a 3-day repeating pattern starting with a fasting day.";
+});
+
+$("extend").addEventListener("click",()=>{
+ let current=getEnd(), newEnd=$("newEnd").value;
+ if(!newEnd||newEnd<=current){
+   $("extendMsg").textContent="Choose a date later than "+fmtDate(current)+".";
+   return;
+ }
+ setEnd(newEnd);
+ $("extendMsg").textContent="Goal extended through "+fmtDate(newEnd)+". Your previous entries were preserved.";
+ render();
+});
+
+$("reset").addEventListener("click",()=>{
+ if(confirm("Clear all saved entries?")){
+   entries=[];
+   localStorage.removeItem("wt_entries");
+   $("weight").value="";$("steps").value="";$("cal").value="";
+   $("date").value=start;$("msg").textContent="Tracker reset.";render();
+ }
+});
+
+function render(){
+ let end=getEnd();
+ $("days").textContent=diff(start,end);
+ $("newEnd").value=end;
+ if(end!==originalEnd){
+   $("app").querySelector(".muted").textContent="Sep 21, 2026 → "+fmtDate(end);
+ }
+ $("rows").innerHTML="";
+ for(let d=0;d<=diff(start,end);d++){
+   let date=new Date(utc(start)+d*86400000);
+   let ds=date.toISOString().slice(0,10);
+   let item=entries.find(x=>x.date===ds);
+   let tr=document.createElement("tr");
+   tr.innerHTML="<td>"+ds+"</td><td>"+(d+1)+"</td><td>"+planFor(ds)+"</td><td>"+(item?item.weight:"—")+"</td><td>"+(item?item.steps:"—")+"</td><td>"+(item?item.calories:"—")+"</td>";
+   $("rows").appendChild(tr);
+ }
+ let saved=entries.length, pct=Math.max(0,Math.min(100,(diff(start, new Date().toISOString().slice(0,10))/Math.max(1,diff(start,end)))*100));
+ $("bar").style.width=pct+"%";
+ $("progressText").textContent="Theoretical scale change: −11.6 lb";
+}
 if("serviceWorker" in navigator) window.addEventListener("load",()=>navigator.serviceWorker.register("sw.js").catch(()=>{}));
 render();
 })();
 </script>
 </body>
-</html<div class="card">
-<h2>Extend Goal</h2>
-<p class="small">Your existing entries will stay saved. Choose a later end date to continue the theoretical plan.</p>
-<label for="newGoal">New end date</label>
-<input id="newGoal" type="date" min="2026-10-12">
-<button onclick="extendGoal()">Extend Goal</button>
-<div id="extendStatus" class="small"></div>
-</div>
->
+</html>
